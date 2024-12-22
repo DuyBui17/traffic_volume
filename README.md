@@ -1,81 +1,150 @@
 import java.util.*;
+import java.text.*;
+import java.util.stream.*;
 
-// TrafficAnalysisByWeather Class: Analyzes traffic volume based on weather conditions.
-public class TrafficAnalysisByWeather {
+public class TrafficAnalysisHoliday {
+    private List<TrafficData> data;
 
-    // Inner class to represent a single traffic data record
-    static class TrafficRecord {
-        private double trafficVolume;
-        private String weatherCondition;
+    public TrafficAnalysisHoliday(List<TrafficData> data) {
+        this.data = data;
+    }
 
-        public TrafficRecord(double trafficVolume, String weatherCondition) {
+    // Phân tích lưu lượng giao thông trong các ngày lễ và không lễ
+    public void analyzeTrafficOnHolidays() {
+        long holidayCount = data.stream().filter(d -> d.getHoliday().equals("Yes")).count();
+        long nonHolidayCount = data.stream().filter(d -> d.getHoliday().equals("No")).count();
+
+        double holidayAvg = data.stream()
+                .filter(d -> d.getHoliday().equals("Yes"))
+                .mapToDouble(TrafficData::getTrafficVolume)
+                .average()
+                .orElse(0.0);
+
+        double nonHolidayAvg = data.stream()
+                .filter(d -> d.getHoliday().equals("No"))
+                .mapToDouble(TrafficData::getTrafficVolume)
+                .average()
+                .orElse(0.0);
+
+        System.out.println("Number of holidays: " + holidayCount);
+        System.out.println("Number of non-holidays: " + nonHolidayCount);
+        System.out.println("Average traffic on holidays: " + holidayAvg);
+        System.out.println("Average traffic on non-holidays: " + nonHolidayAvg);
+    }
+
+    // Phân tích lưu lượng giao thông theo ngày trong tuần (so sánh giữa ngày lễ và không lễ)
+    public void visualizeTrafficByDay() {
+        Map<String, Double> holidayAvgTrafficByDay = new HashMap<>();
+        Map<String, Double> nonHolidayAvgTrafficByDay = new HashMap<>();
+
+        data.forEach(d -> {
+            if (d.getHoliday().equals("Yes")) {
+                holidayAvgTrafficByDay.merge(d.getDayOfWeek(), d.getTrafficVolume(), Double::sum);
+            } else {
+                nonHolidayAvgTrafficByDay.merge(d.getDayOfWeek(), d.getTrafficVolume(), Double::sum);
+            }
+        });
+
+        // Tính trung bình theo ngày
+        holidayAvgTrafficByDay.forEach((day, totalTraffic) ->
+                holidayAvgTrafficByDay.put(day, totalTraffic / countByDay("Yes", day))
+        );
+
+        nonHolidayAvgTrafficByDay.forEach((day, totalTraffic) ->
+                nonHolidayAvgTrafficByDay.put(day, totalTraffic / countByDay("No", day))
+        );
+
+        System.out.println("Holiday traffic by day of the week: " + holidayAvgTrafficByDay);
+        System.out.println("Non-holiday traffic by day of the week: " + nonHolidayAvgTrafficByDay);
+    }
+
+    // So sánh lưu lượng giao thông theo giờ trong ngày
+    public void compareTrafficByHour() {
+        Map<Integer, Double> holidayAvgTrafficByHour = new HashMap<>();
+        Map<Integer, Double> nonHolidayAvgTrafficByHour = new HashMap<>();
+
+        data.forEach(d -> {
+            if (d.getHoliday().equals("Yes")) {
+                holidayAvgTrafficByHour.merge(d.getHour(), d.getTrafficVolume(), Double::sum);
+            } else {
+                nonHolidayAvgTrafficByHour.merge(d.getHour(), d.getTrafficVolume(), Double::sum);
+            }
+        });
+
+        // Tính trung bình theo giờ
+        holidayAvgTrafficByHour.forEach((hour, totalTraffic) ->
+                holidayAvgTrafficByHour.put(hour, totalTraffic / countByHour("Yes", hour))
+        );
+
+        nonHolidayAvgTrafficByHour.forEach((hour, totalTraffic) ->
+                nonHolidayAvgTrafficByHour.put(hour, totalTraffic / countByHour("No", hour))
+        );
+
+        System.out.println("Holiday traffic by hour: " + holidayAvgTrafficByHour);
+        System.out.println("Non-holiday traffic by hour: " + nonHolidayAvgTrafficByHour);
+    }
+
+    // Đếm số lượng ngày lễ hoặc không lễ cho một ngày cụ thể trong tuần
+    private long countByDay(String holidayType, String dayOfWeek) {
+        return data.stream().filter(d -> d.getHoliday().equals(holidayType) && d.getDayOfWeek().equals(dayOfWeek)).count();
+    }
+
+    // Đếm số lượng giờ lễ hoặc không lễ cho một giờ cụ thể trong ngày
+    private long countByHour(String holidayType, int hour) {
+        return data.stream().filter(d -> d.getHoliday().equals(holidayType) && d.getHour() == hour).count();
+    }
+
+    // Class lưu trữ thông tin về giao thông
+    public static class TrafficData {
+        private int trafficVolume;
+        private String holiday;
+        private String dayOfWeek;
+        private int hour;
+
+        public TrafficData(int trafficVolume, String holiday, String dayOfWeek, int hour) {
             this.trafficVolume = trafficVolume;
-            this.weatherCondition = weatherCondition;
+            this.holiday = holiday;
+            this.dayOfWeek = dayOfWeek;
+            this.hour = hour;
         }
 
-        public double getTrafficVolume() {
+        public int getTrafficVolume() {
             return trafficVolume;
         }
 
-        public String getWeatherCondition() {
-            return weatherCondition;
+        public String getHoliday() {
+            return holiday;
+        }
+
+        public String getDayOfWeek() {
+            return dayOfWeek;
+        }
+
+        public int getHour() {
+            return hour;
         }
     }
 
-    // Method to analyze traffic volume based on weather conditions
-    public static Map<String, Double> analyzeTrafficByWeather(List<TrafficRecord> records) {
-        Map<String, Double> totalTrafficByWeather = new HashMap<>();
-        Map<String, Integer> countByWeather = new HashMap<>();
+    public static void main(String[] args) throws ParseException {
+        List<TrafficData> data = new ArrayList<>();
+        SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy HH:mm");
 
-        // Aggregate traffic volume and count records for each weather condition
-        for (TrafficRecord record : records) {
-            String weather = record.getWeatherCondition();
-            double volume = record.getTrafficVolume();
+        // Ví dụ về dữ liệu
+        data.add(new TrafficData(5545, "No", "Monday", 9));
+        data.add(new TrafficData(4516, "No", "Monday", 10));
+        data.add(new TrafficData(4767, "No", "Monday", 11));
+        data.add(new TrafficData(5026, "No", "Monday", 12));
+        
+        // Khởi tạo đối tượng phân tích
+        TrafficAnalysisHoliday analysis = new TrafficAnalysisHoliday(data);
 
-            // Update totalTrafficByWeather
-            if (!totalTrafficByWeather.containsKey(weather)) {
-                totalTrafficByWeather.put(weather, volume);
-            } else {
-                totalTrafficByWeather.put(weather, totalTrafficByWeather.get(weather) + volume);
-            }
-
-            // Update countByWeather
-            if (!countByWeather.containsKey(weather)) {
-                countByWeather.put(weather, 1);
-            } else {
-                countByWeather.put(weather, countByWeather.get(weather) + 1);
-            }
-        }
-
-        // Calculate the average traffic volume for each weather condition
-        Map<String, Double> averageTrafficByWeather = new HashMap<>();
-        for (String weather : totalTrafficByWeather.keySet()) {
-            double totalTraffic = totalTrafficByWeather.get(weather);
-            int count = countByWeather.get(weather);
-            averageTrafficByWeather.put(weather, totalTraffic / count);
-        }
-
-        return averageTrafficByWeather;
-    }
-
-    // Main method for testing
-    public static void main(String[] args) {
-        // Sample data
-        List<TrafficRecord> records = Arrays.asList(
-            new TrafficRecord(5545, "Clouds"),
-            new TrafficRecord(4516, "Clouds"),
-            new TrafficRecord(4767, "Rain"),
-            new TrafficRecord(5026, "Clouds"),
-            new TrafficRecord(3000, "Snow")
-        );
-
-        // Perform analysis
-        Map<String, Double> result = analyzeTrafficByWeather(records);
-
-        // Display results
-        System.out.println("Traffic Volume by Weather Condition:");
-        for (Map.Entry<String, Double> entry : result.entrySet()) {
-            System.out.printf("%s: %.2f\n", entry.getKey(), entry.getValue());
-        }
+        // Phân tích lưu lượng giao thông vào các ngày lễ và không lễ
+        analysis.analyzeTrafficOnHolidays();
+        
+        // Phân tích lưu lượng giao thông theo ngày trong tuần
+        analysis.visualizeTrafficByDay();
+        
+        // So sánh lưu lượng giao thông theo giờ
+        analysis.compareTrafficByHour();
     }
 }
