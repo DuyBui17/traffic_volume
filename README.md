@@ -32,8 +32,19 @@ public class TrafficAnalysisByWeather {
             String weather = record.getWeatherCondition();
             double volume = record.getTrafficVolume();
 
-            totalTrafficByWeather.put(weather, totalTrafficByWeather.getOrDefault(weather, 0.0) + volume);
-            countByWeather.put(weather, countByWeather.getOrDefault(weather, 0) + 1);
+            // Update totalTrafficByWeather
+            if (!totalTrafficByWeather.containsKey(weather)) {
+                totalTrafficByWeather.put(weather, volume);
+            } else {
+                totalTrafficByWeather.put(weather, totalTrafficByWeather.get(weather) + volume);
+            }
+
+            // Update countByWeather
+            if (!countByWeather.containsKey(weather)) {
+                countByWeather.put(weather, 1);
+            } else {
+                countByWeather.put(weather, countByWeather.get(weather) + 1);
+            }
         }
 
         // Calculate the average traffic volume for each weather condition
