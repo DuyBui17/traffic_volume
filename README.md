@@ -5,36 +5,46 @@ public class TrafficAnalysisByWeather {
 
     // Inner class to represent a single traffic data record
     static class TrafficRecord {
-        double trafficVolume;
-        String weatherCondition;
+        private double trafficVolume;
+        private String weatherCondition;
 
         public TrafficRecord(double trafficVolume, String weatherCondition) {
             this.trafficVolume = trafficVolume;
             this.weatherCondition = weatherCondition;
         }
+
+        public double getTrafficVolume() {
+            return trafficVolume;
+        }
+
+        public String getWeatherCondition() {
+            return weatherCondition;
+        }
     }
 
     // Method to analyze traffic volume based on weather conditions
     public static Map<String, Double> analyzeTrafficByWeather(List<TrafficRecord> records) {
-        Map<String, Double> weatherTrafficMap = new HashMap<>();
-        Map<String, Integer> weatherCountMap = new HashMap<>();
+        Map<String, Double> totalTrafficByWeather = new HashMap<>();
+        Map<String, Integer> countByWeather = new HashMap<>();
 
         // Aggregate traffic volume and count records for each weather condition
         for (TrafficRecord record : records) {
-            weatherTrafficMap.put(record.weatherCondition, 
-                weatherTrafficMap.getOrDefault(record.weatherCondition, 0.0) + record.trafficVolume);
-            weatherCountMap.put(record.weatherCondition, 
-                weatherCountMap.getOrDefault(record.weatherCondition, 0) + 1);
+            String weather = record.getWeatherCondition();
+            double volume = record.getTrafficVolume();
+
+            totalTrafficByWeather.put(weather, totalTrafficByWeather.getOrDefault(weather, 0.0) + volume);
+            countByWeather.put(weather, countByWeather.getOrDefault(weather, 0) + 1);
         }
 
         // Calculate the average traffic volume for each weather condition
-        for (String weather : weatherTrafficMap.keySet()) {
-            double totalTraffic = weatherTrafficMap.get(weather);
-            int count = weatherCountMap.get(weather);
-            weatherTrafficMap.put(weather, totalTraffic / count);
+        Map<String, Double> averageTrafficByWeather = new HashMap<>();
+        for (String weather : totalTrafficByWeather.keySet()) {
+            double totalTraffic = totalTrafficByWeather.get(weather);
+            int count = countByWeather.get(weather);
+            averageTrafficByWeather.put(weather, totalTraffic / count);
         }
 
-        return weatherTrafficMap;
+        return averageTrafficByWeather;
     }
 
     // Main method for testing
