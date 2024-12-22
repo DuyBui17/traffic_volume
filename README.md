@@ -1,6 +1,5 @@
 import java.util.*;
 import java.text.*;
-import java.util.stream.*;
 
 public class TrafficAnalysisHoliday {
     private List<TrafficData> data;
@@ -11,20 +10,23 @@ public class TrafficAnalysisHoliday {
 
     // Phân tích lưu lượng giao thông trong các ngày lễ và không lễ
     public void analyzeTrafficOnHolidays() {
-        long holidayCount = data.stream().filter(d -> d.getHoliday().equals("Yes")).count();
-        long nonHolidayCount = data.stream().filter(d -> d.getHoliday().equals("No")).count();
+        int holidayCount = 0;
+        int nonHolidayCount = 0;
+        double holidaySum = 0;
+        double nonHolidaySum = 0;
 
-        double holidayAvg = data.stream()
-                .filter(d -> d.getHoliday().equals("Yes"))
-                .mapToDouble(TrafficData::getTrafficVolume)
-                .average()
-                .orElse(0.0);
+        for (TrafficData d : data) {
+            if (d.getHoliday().equals("Yes")) {
+                holidayCount++;
+                holidaySum += d.getTrafficVolume();
+            } else {
+                nonHolidayCount++;
+                nonHolidaySum += d.getTrafficVolume();
+            }
+        }
 
-        double nonHolidayAvg = data.stream()
-                .filter(d -> d.getHoliday().equals("No"))
-                .mapToDouble(TrafficData::getTrafficVolume)
-                .average()
-                .orElse(0.0);
+        double holidayAvg = holidayCount > 0 ? holidaySum / holidayCount : 0;
+        double nonHolidayAvg = nonHolidayCount > 0 ? nonHolidaySum / nonHolidayCount : 0;
 
         System.out.println("Number of holidays: " + holidayCount);
         System.out.println("Number of non-holidays: " + nonHolidayCount);
@@ -36,23 +38,29 @@ public class TrafficAnalysisHoliday {
     public void visualizeTrafficByDay() {
         Map<String, Double> holidayAvgTrafficByDay = new HashMap<>();
         Map<String, Double> nonHolidayAvgTrafficByDay = new HashMap<>();
+        Map<String, Integer> holidayDayCount = new HashMap<>();
+        Map<String, Integer> nonHolidayDayCount = new HashMap<>();
 
-        data.forEach(d -> {
+        // Tính tổng và số lượng giao thông theo ngày trong tuần cho cả ngày lễ và không lễ
+        for (TrafficData d : data) {
+            String dayOfWeek = d.getDayOfWeek();
             if (d.getHoliday().equals("Yes")) {
-                holidayAvgTrafficByDay.merge(d.getDayOfWeek(), d.getTrafficVolume(), Double::sum);
+                holidayAvgTrafficByDay.put(dayOfWeek, holidayAvgTrafficByDay.getOrDefault(dayOfWeek, 0.0) + d.getTrafficVolume());
+                holidayDayCount.put(dayOfWeek, holidayDayCount.getOrDefault(dayOfWeek, 0) + 1);
             } else {
-                nonHolidayAvgTrafficByDay.merge(d.getDayOfWeek(), d.getTrafficVolume(), Double::sum);
+                nonHolidayAvgTrafficByDay.put(dayOfWeek, nonHolidayAvgTrafficByDay.getOrDefault(dayOfWeek, 0.0) + d.getTrafficVolume());
+                nonHolidayDayCount.put(dayOfWeek, nonHolidayDayCount.getOrDefault(dayOfWeek, 0) + 1);
             }
-        });
+        }
 
-        // Tính trung bình theo ngày
-        holidayAvgTrafficByDay.forEach((day, totalTraffic) ->
-                holidayAvgTrafficByDay.put(day, totalTraffic / countByDay("Yes", day))
-        );
+        // Tính trung bình giao thông theo ngày trong tuần
+        for (String day : holidayAvgTrafficByDay.keySet()) {
+            holidayAvgTrafficByDay.put(day, holidayAvgTrafficByDay.get(day) / holidayDayCount.get(day));
+        }
 
-        nonHolidayAvgTrafficByDay.forEach((day, totalTraffic) ->
-                nonHolidayAvgTrafficByDay.put(day, totalTraffic / countByDay("No", day))
-        );
+        for (String day : nonHolidayAvgTrafficByDay.keySet()) {
+            nonHolidayAvgTrafficByDay.put(day, nonHolidayAvgTrafficByDay.get(day) / nonHolidayDayCount.get(day));
+        }
 
         System.out.println("Holiday traffic by day of the week: " + holidayAvgTrafficByDay);
         System.out.println("Non-holiday traffic by day of the week: " + nonHolidayAvgTrafficByDay);
@@ -62,36 +70,32 @@ public class TrafficAnalysisHoliday {
     public void compareTrafficByHour() {
         Map<Integer, Double> holidayAvgTrafficByHour = new HashMap<>();
         Map<Integer, Double> nonHolidayAvgTrafficByHour = new HashMap<>();
+        Map<Integer, Integer> holidayHourCount = new HashMap<>();
+        Map<Integer, Integer> nonHolidayHourCount = new HashMap<>();
 
-        data.forEach(d -> {
+        // Tính tổng và số lượng giao thông theo giờ trong ngày cho cả ngày lễ và không lễ
+        for (TrafficData d : data) {
+            int hour = d.getHour();
             if (d.getHoliday().equals("Yes")) {
-                holidayAvgTrafficByHour.merge(d.getHour(), d.getTrafficVolume(), Double::sum);
+                holidayAvgTrafficByHour.put(hour, holidayAvgTrafficByHour.getOrDefault(hour, 0.0) + d.getTrafficVolume());
+                holidayHourCount.put(hour, holidayHourCount.getOrDefault(hour, 0) + 1);
             } else {
-                nonHolidayAvgTrafficByHour.merge(d.getHour(), d.getTrafficVolume(), Double::sum);
+                nonHolidayAvgTrafficByHour.put(hour, nonHolidayAvgTrafficByHour.getOrDefault(hour, 0.0) + d.getTrafficVolume());
+                nonHolidayHourCount.put(hour, nonHolidayHourCount.getOrDefault(hour, 0) + 1);
             }
-        });
+        }
 
-        // Tính trung bình theo giờ
-        holidayAvgTrafficByHour.forEach((hour, totalTraffic) ->
-                holidayAvgTrafficByHour.put(hour, totalTraffic / countByHour("Yes", hour))
-        );
+        // Tính trung bình giao thông theo giờ trong ngày
+        for (int hour : holidayAvgTrafficByHour.keySet()) {
+            holidayAvgTrafficByHour.put(hour, holidayAvgTrafficByHour.get(hour) / holidayHourCount.get(hour));
+        }
 
-        nonHolidayAvgTrafficByHour.forEach((hour, totalTraffic) ->
-                nonHolidayAvgTrafficByHour.put(hour, totalTraffic / countByHour("No", hour))
-        );
+        for (int hour : nonHolidayAvgTrafficByHour.keySet()) {
+            nonHolidayAvgTrafficByHour.put(hour, nonHolidayAvgTrafficByHour.get(hour) / nonHolidayHourCount.get(hour));
+        }
 
         System.out.println("Holiday traffic by hour: " + holidayAvgTrafficByHour);
         System.out.println("Non-holiday traffic by hour: " + nonHolidayAvgTrafficByHour);
-    }
-
-    // Đếm số lượng ngày lễ hoặc không lễ cho một ngày cụ thể trong tuần
-    private long countByDay(String holidayType, String dayOfWeek) {
-        return data.stream().filter(d -> d.getHoliday().equals(holidayType) && d.getDayOfWeek().equals(dayOfWeek)).count();
-    }
-
-    // Đếm số lượng giờ lễ hoặc không lễ cho một giờ cụ thể trong ngày
-    private long countByHour(String holidayType, int hour) {
-        return data.stream().filter(d -> d.getHoliday().equals(holidayType) && d.getHour() == hour).count();
     }
 
     // Class lưu trữ thông tin về giao thông
@@ -125,9 +129,8 @@ public class TrafficAnalysisHoliday {
         }
     }
 
-    public static void main(String[] args) throws ParseException {
+    public static void main(String[] args) {
         List<TrafficData> data = new ArrayList<>();
-        SimpleDateFormat sdf = new SimpleDateFormat("dd-MM-yyyy HH:mm");
 
         // Ví dụ về dữ liệu
         data.add(new TrafficData(5545, "No", "Monday", 9));
