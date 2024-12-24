@@ -1,83 +1,87 @@
-import java.io.*;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
-import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
+
+import java.io.IOException;
 
 public class TemperatureConverter {
 
-    public static class TempMapper extends Mapper<Object, Text, Text, Text> {
-
-        private boolean isHeader = true;
+    // Mapper Class: Chuyển đổi nhiệt độ từ Kelvin sang Celsius
+    public static class TemperatureMapper extends Mapper<Object, Text, Text, Text> {
 
         @Override
-        protected void map(Object key, Text value, Context context) throws IOException, InterruptedException {
-            String line = value.toString();
-
-            // Skip header line
-            if (isHeader) {
-                isHeader = false;
-                context.write(new Text(""), new Text(line));
-                return;
-            }
-
-            String[] fields = line.split(",");
+        public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
+            // Tách các trường dữ liệu bằng dấu phẩy
+            String[] fields = value.toString().split(",");
+            
+            // Nếu không phải là dòng header, thực hiện chuyển đổi nhiệt độ
             if (fields.length > 2) {
                 try {
-                    double tempF = Double.parseDouble(fields[2]);
-                    double tempC = tempF - 273.15; // Convert Kelvin to Celsius
-                    fields[2] = String.format("%.2f", tempC);
+                    // Lấy nhiệt độ từ trường thứ 3 (temp) trong Kelvin
+                    double tempKelvin = Double.parseDouble(fields[2]);
 
-                    // Manually construct the updated line
-                    StringBuilder updatedLine = new StringBuilder();
-                    for (int i = 0; i < fields.length; i++) {
-                        updatedLine.append(fields[i]);
-                        if (i < fields.length - 1) {
-                            updatedLine.append(",");
-                        }
-                    }
+                    // Chuyển đổi sang Celsius và làm tròn đến 2 chữ số thập phân
+                    double tempCelsius = tempKelvin - 273.15;
+                    tempCelsius = Math.round(tempCelsius * 100.0) / 100.0;
 
-                    // Write the updated record back
-                    context.write(new Text(""), new Text(updatedLine.toString()));
+                    // Cập nhật lại nhiệt độ vào mảng dữ liệu
+                    fields[2] = String.format("%.2f", tempCelsius);  // Định dạng lại nhiệt độ
+
+                    // Tạo dòng kết quả mới và ghi vào context
+                    context.write(new Text(String.join(",", fields)), new Text(""));  // Ghi cả dòng vào
+
                 } catch (NumberFormatException e) {
-                    // Skip invalid records
+                    // Nếu gặp lỗi khi phân tích nhiệt độ, bỏ qua
+                    System.err.println("Error parsing temperature: " + e.getMessage());
                 }
             }
         }
     }
 
-    public static class TempReducer extends Reducer<Text, Text, Text, Text> {
+    // Reducer Class: Ghi các dòng đã chuyển đổi vào file output
+    public static class TemperatureReducer extends Reducer<Text, Text, Text, Text> {
+
         @Override
-        protected void reduce(Text key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
-            for (Text val : values) {
-                context.write(null, val);
-            }
+        public void reduce(Text key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
+            // Ghi các dòng đã được chuyển đổi vào tệp đầu ra
+            context.write(key, new Text(""));  // Ghi toàn bộ dòng kết quả từ Mapper vào tệp đầu ra
         }
     }
 
-    public static void main(String[] args) throws Exception {
-        Configuration conf = new Configuration();
-        Job job = Job.getInstance(conf, "Temperature Converter");
-        job.setJarByClass(TemperatureConverter.class);
-        job.setMapperClass(TempMapper.class);
-        job.setReducerClass(TempReducer.class);
+    // Driver Class: Cấu hình và chạy job MapReduce
+    public static class TemperatureConverterDriver {
 
-        job.setOutputKeyClass(Text.class);
-        job.setOutputValueClass(Text.class);
-        job.setOutputFormatClass(TextOutputFormat.class);
+        public static void main(String[] args) throws Exception {
+            // Kiểm tra số lượng tham số
+            if (args.length != 2) {
+                System.err.println("Usage: TemperatureConverterDriver <input path> <output path>");
+                System.exit(1);
+            }
 
-        FileInputFormat.addInputPath(job, new Path(args[0]));
-        FileOutputFormat.setOutputPath(job, new Path(args[1]));
+            // Cấu hình job Hadoop
+            Configuration conf = new Configuration();
+            Job job = Job.getInstance(conf, "Temperature Converter");
+            job.setJarByClass(TemperatureConverter.class);
+            
+            // Thiết lập Mapper và Reducer
+            job.setMapperClass(TemperatureMapper.class);
+            job.setReducerClass(TemperatureReducer.class);
 
-        // Ensure output file is named explicitly
-        Path outputFile = new Path(args[1] + "/temperature_converter.csv");
-        FileOutputFormat.setOutputName(job, "temperature_converter");
+            // Thiết lập định dạng đầu ra
+            job.setOutputKeyClass(Text.class);
+            job.setOutputValueClass(Text.class);
 
-        System.exit(job.waitForCompletion(true) ? 0 : 1);
+            // Thiết lập đường dẫn đầu vào và đầu ra
+            FileInputFormat.addInputPath(job, new Path(args[0]));  // Đường dẫn tệp đầu vào
+            FileOutputFormat.setOutputPath(job, new Path(args[1]));  // Đường dẫn tệp đầu ra
+
+            // Chạy job Hadoop
+            System.exit(job.waitForCompletion(true) ? 0 : 1);
+        }
     }
 }
