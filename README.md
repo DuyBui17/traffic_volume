@@ -1,62 +1,78 @@
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.*;
+import org.apache.hadoop.io.*;
+import org.apache.hadoop.mapred.*;
+
+import java.io.*;
+
 public class TemperatureConverter {
 
-    // Lớp Mapper
-    public static class TemperatureMapper extends Mapper<Object, Text, Text, Text> {
-        @Override
-        public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
-            String[] fields = value.toString().split(",");
-            if (fields.length > 2) {
-                try {
-                    double tempKelvin = Double.parseDouble(fields[2]);
-                    double tempCelsius = tempKelvin - 273.15;
-                    tempCelsius = Math.round(tempCelsius * 100.0) / 100.0;
-                    fields[2] = String.format("%.2f", tempCelsius);
-                    StringBuilder sb = new StringBuilder();
-                    for (int i = 0; i < fields.length; i++) {
-                        sb.append(fields[i]);
-                        if (i < fields.length - 1) {
-                            sb.append(",");
-                        }
-                    }
-                    context.write(new Text(sb.toString()), new Text(""));
-                } catch (NumberFormatException e) {
-                    System.err.println("Error parsing temperature: " + e.getMessage());
-                }
-            }
-        }
+    // Hàm chuyển từ K sang °C
+    public static double kelvinToCelsius(double kelvin) {
+        return kelvin - 273.15;
     }
 
-    // Lớp Reducer
-    public static class TemperatureReducer extends Reducer<Text, Text, Text, Text> {
-        @Override
-        public void reduce(Text key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
-            context.write(key, new Text(""));
+    // Hàm xử lý đọc, chuyển đổi và ghi dữ liệu vào HDFS
+    public static void convertTemperatureInHDFS(String inputFilePath, String outputDirPath) throws IOException {
+        Configuration conf = new Configuration();
+        FileSystem fs = FileSystem.get(conf);
+
+        // Đọc file đầu vào từ HDFS
+        Path inputPath = new Path(inputFilePath);
+        FSDataInputStream in = fs.open(inputPath);
+        BufferedReader br = new BufferedReader(new InputStreamReader(in));
+
+        // Tạo output path
+        Path outputPath = new Path(outputDirPath, "updated_data.csv");
+        FSDataOutputStream out = fs.create(outputPath);
+        BufferedWriter bw = new BufferedWriter(new OutputStreamWriter(out));
+
+        String line;
+        boolean isFirstLine = true; // Biến để kiểm tra dòng đầu tiên (header)
+        
+        // Đọc từng dòng dữ liệu
+        while ((line = br.readLine()) != null) {
+            String[] data = line.split(",");
+
+            // Nếu là dòng header, chỉ ghi lại nguyên vẹn
+            if (isFirstLine) {
+                bw.write(String.join(",", data));
+                bw.newLine();
+                isFirstLine = false;
+            } else {
+                // Chuyển đổi nhiệt độ từ K sang °C
+                double kelvin = Double.parseDouble(data[2]);
+                double celsius = kelvinToCelsius(kelvin);
+
+                // Cập nhật nhiệt độ mới vào dữ liệu
+                data[2] = String.format("%.2f", celsius);  // Cập nhật cột "temp"
+
+                // Ghi dữ liệu đã chuyển đổi vào file đầu ra
+                bw.write(String.join(",", data));
+                bw.newLine();
+            }
         }
+
+        // Đóng các dòng
+        br.close();
+        bw.close();
+        in.close();
+        out.close();
+
+        System.out.println("Dữ liệu đã được ghi vào HDFS tại: " + outputDirPath + "/updated_data.csv");
     }
 
-    // Lớp Driver (chứa phương thức main)
-    public static class TemperatureConverterDriver {
-
-        public static void main(String[] args) throws Exception {
-            if (args.length != 2) {
-                System.err.println("Usage: TemperatureConverterDriver <input path> <output path>");
-                System.exit(1);
-            }
-
-            Configuration conf = new Configuration();
-            Job job = Job.getInstance(conf, "Temperature Converter");
-            job.setJarByClass(TemperatureConverterDriver.class); // Đảm bảo chỉ ra lớp chứa main
-            
-            job.setMapperClass(TemperatureMapper.class);
-            job.setReducerClass(TemperatureReducer.class);
-
-            job.setOutputKeyClass(Text.class);
-            job.setOutputValueClass(Text.class);
-
-            FileInputFormat.addInputPath(job, new Path(args[0]));
-            FileOutputFormat.setOutputPath(job, new Path(args[1]));
-
-            System.exit(job.waitForCompletion(true) ? 0 : 1);
+    public static void main(String[] args) throws Exception {
+        // Lấy các tham số đầu vào từ dòng lệnh
+        if (args.length != 2) {
+            System.err.println("Usage: TemperatureConverter <input_path> <output_path>");
+            System.exit(-1);
         }
+
+        String inputFilePath = args[0];  // Đường dẫn đầu vào (ví dụ: /inputfolder1/data.csv)
+        String outputDirPath = args[1];  // Thư mục đầu ra trên HDFS (ví dụ: /out4)
+
+        // Chuyển đổi nhiệt độ và lưu kết quả vào HDFS
+        convertTemperatureInHDFS(inputFilePath, outputDirPath);
     }
 }
