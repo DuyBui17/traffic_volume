@@ -9,6 +9,18 @@ public class TemperatureConverter {
         return kelvin - 273.15;
     }
 
+    // Hàm nối các chuỗi với dấu phẩy
+    public static String joinStrings(String[] data, String delimiter) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < data.length; i++) {
+            sb.append(data[i]);
+            if (i < data.length - 1) {
+                sb.append(delimiter);  // Thêm dấu phân cách
+            }
+        }
+        return sb.toString();
+    }
+
     // Hàm xử lý đọc, chuyển đổi và ghi dữ liệu vào HDFS
     public static void convertTemperatureInHDFS(String inputFilePath, String outputDirPath) throws IOException {
         Configuration conf = new Configuration();
@@ -33,7 +45,7 @@ public class TemperatureConverter {
 
             // Nếu là dòng header, chỉ ghi lại nguyên vẹn
             if (isFirstLine) {
-                bw.write(String.join(",", data));
+                bw.write(joinStrings(data, ","));  // Sử dụng phương thức joinStrings
                 bw.newLine();
                 isFirstLine = false;
             } else {
@@ -45,7 +57,7 @@ public class TemperatureConverter {
                 data[2] = String.format("%.2f", celsius);  // Cập nhật cột "temp"
 
                 // Ghi dữ liệu đã chuyển đổi vào file đầu ra
-                bw.write(String.join(",", data));
+                bw.write(joinStrings(data, ","));  // Sử dụng phương thức joinStrings
                 bw.newLine();
             }
         }
