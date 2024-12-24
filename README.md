@@ -1,8 +1,5 @@
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.*;
-import org.apache.hadoop.io.*;
-import org.apache.hadoop.mapred.*;
-
 import java.io.*;
 
 public class TemperatureConverter {
