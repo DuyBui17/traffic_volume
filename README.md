@@ -1,14 +1,24 @@
 import java.io.*;
-import java.util.*;
 
-public class TemperatureProcessor {
+public class TemperatureConverterFromCSV {
 
-    // Phương thức chuyển đổi từ Fahrenheit sang Celsius
+    /**
+     * Chuyển đổi nhiệt độ từ Fahrenheit sang Celsius.
+     *
+     * @param fahrenheit nhiệt độ F
+     * @return nhiệt độ C
+     */
     public static double fahrenheitToCelsius(double fahrenheit) {
         return (fahrenheit - 32) * 5 / 9;
     }
 
-    // Phương thức xử lý file CSV
+    /**
+     * Xử lý file CSV, chuyển đổi cột nhiệt độ từ Fahrenheit sang Celsius
+     * và lưu kết quả vào file mới.
+     *
+     * @param inputFile  tên file đầu vào
+     * @param outputFile tên file đầu ra
+     */
     public static void processTemperatureCSV(String inputFile, String outputFile) {
         try (
             BufferedReader reader = new BufferedReader(new FileReader(inputFile));
@@ -19,9 +29,9 @@ public class TemperatureProcessor {
 
             // Đọc từng dòng trong file CSV
             while ((line = reader.readLine()) != null) {
-                // Xử lý dòng tiêu đề
+                // Ghi dòng tiêu đề vào file mới
                 if (isHeader) {
-                    writer.write(line + "\n"); // Ghi tiêu đề vào file mới
+                    writer.write(line + System.lineSeparator());
                     isHeader = false;
                     continue;
                 }
@@ -31,25 +41,34 @@ public class TemperatureProcessor {
 
                 // Kiểm tra số lượng cột hợp lệ
                 if (columns.length != 9) {
-                    System.err.println("Invalid row: " + line);
+                    System.err.println("Dòng không hợp lệ: " + line);
                     continue;
                 }
 
                 // Chuyển đổi nhiệt độ từ Fahrenheit sang Celsius
-                double tempFahrenheit = Double.parseDouble(columns[2]);
-                double tempCelsius = fahrenheitToCelsius(tempFahrenheit);
+                try {
+                    double tempFahrenheit = Double.parseDouble(columns[2]);
+                    double tempCelsius = fahrenheitToCelsius(tempFahrenheit);
+                    columns[2] = String.format("%.2f", tempCelsius); // Cập nhật giá trị trong cột `temp`
+                } catch (NumberFormatException e) {
+                    System.err.println("Lỗi chuyển đổi nhiệt độ ở dòng: " + line);
+                }
 
-                // Thay thế giá trị nhiệt độ trong cột `temp`
-                columns[2] = String.format("%.2f", tempCelsius);
-
-                // Ghi dòng đã chuyển đổi vào file mới
-                writer.write(String.join(",", columns) + "\n");
+                // Xây dựng lại dòng và ghi vào file mới
+                StringBuilder rowBuilder = new StringBuilder();
+                for (int i = 0; i < columns.length; i++) {
+                    rowBuilder.append(columns[i]);
+                    if (i < columns.length - 1) {
+                        rowBuilder.append(","); // Thêm dấu phẩy giữa các cột
+                    }
+                }
+                writer.write(rowBuilder.toString() + System.lineSeparator());
             }
 
-            System.out.println("Processing complete. Output saved to " + outputFile);
+            System.out.println("Xử lý hoàn tất. File đầu ra: " + outputFile);
 
         } catch (IOException e) {
-            System.err.println("Error processing file: " + e.getMessage());
+            System.err.println("Lỗi khi xử lý file: " + e.getMessage());
         }
     }
 
@@ -58,7 +77,7 @@ public class TemperatureProcessor {
         String inputFile = "data.csv";
         String outputFile = "processed_data.csv";
 
-        // Xử lý file CSV
+        // Gọi phương thức xử lý file CSV
         processTemperatureCSV(inputFile, outputFile);
     }
 }
