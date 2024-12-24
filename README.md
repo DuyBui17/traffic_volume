@@ -33,8 +33,17 @@ public class TemperatureConverter {
                     double tempC = tempF - 273.15; // Convert Kelvin to Celsius
                     fields[2] = String.format("%.2f", tempC);
 
+                    // Manually construct the updated line
+                    StringBuilder updatedLine = new StringBuilder();
+                    for (int i = 0; i < fields.length; i++) {
+                        updatedLine.append(fields[i]);
+                        if (i < fields.length - 1) {
+                            updatedLine.append(",");
+                        }
+                    }
+
                     // Write the updated record back
-                    context.write(new Text(""), new Text(String.join(",", fields)));
+                    context.write(new Text(""), new Text(updatedLine.toString()));
                 } catch (NumberFormatException e) {
                     // Skip invalid records
                 }
