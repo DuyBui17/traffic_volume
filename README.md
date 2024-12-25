@@ -5,6 +5,7 @@ import java.util.*;
 
 public class TrafficWeatherAnalysis {
 
+    // Hàm đọc dữ liệu từ file CSV và phân tích mối quan hệ
     public static void analyzeTrafficWeather(String inputFilePath) throws IOException {
         Configuration conf = new Configuration();
         FileSystem fs = FileSystem.get(conf);
@@ -37,38 +38,23 @@ public class TrafficWeatherAnalysis {
 
                 // Kiểm tra và thêm giá trị vào bản đồ (Map) nếu chưa tồn tại
                 if (temp != -1) {
-                    if (!trafficData.containsKey("temp")) {
-                        trafficData.put("temp", new ArrayList<>());
-                    }
-                    trafficData.get("temp").add(temp);
+                    trafficData.computeIfAbsent("temp", k -> new ArrayList<>()).add(temp);
                 }
 
                 if (rain != -1) {
-                    if (!trafficData.containsKey("rain")) {
-                        trafficData.put("rain", new ArrayList<>());
-                    }
-                    trafficData.get("rain").add(rain);
+                    trafficData.computeIfAbsent("rain", k -> new ArrayList<>()).add(rain);
                 }
 
                 if (snow != -1) {
-                    if (!trafficData.containsKey("snow")) {
-                        trafficData.put("snow", new ArrayList<>());
-                    }
-                    trafficData.get("snow").add(snow);
+                    trafficData.computeIfAbsent("snow", k -> new ArrayList<>()).add(snow);
                 }
 
                 if (clouds != -1) {
-                    if (!trafficData.containsKey("clouds")) {
-                        trafficData.put("clouds", new ArrayList<>());
-                    }
-                    trafficData.get("clouds").add(clouds);
+                    trafficData.computeIfAbsent("clouds", k -> new ArrayList<>()).add(clouds);
                 }
 
                 if (trafficVolume != -1) {
-                    if (!trafficData.containsKey("trafficVolume")) {
-                        trafficData.put("trafficVolume", new ArrayList<>());
-                    }
-                    trafficData.get("trafficVolume").add(trafficVolume);
+                    trafficData.computeIfAbsent("trafficVolume", k -> new ArrayList<>()).add(trafficVolume);
                 }
 
             } catch (NumberFormatException e) {
