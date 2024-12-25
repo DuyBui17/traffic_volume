@@ -1,85 +1,88 @@
-import org.apache.hadoop.io.IntWritable;
-import org.apache.hadoop.io.Text;
-import org.apache.hadoop.mapreduce.Mapper;
-import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.mapreduce.Job;
-import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
-import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.io.DoubleWritable;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapred.FileInputFormat;
+import org.apache.hadoop.mapred.FileOutputFormat;
+import org.apache.hadoop.mapred.JobConf;
+import org.apache.hadoop.mapred.MapReduceBase;
+import org.apache.hadoop.mapred.Mapper;
+import org.apache.hadoop.mapred.Reducer;
+import org.apache.hadoop.mapred.RecordReader;
+import org.apache.hadoop.mapred.Reporter;
+import org.apache.hadoop.mapred.TextInputFormat;
+import org.apache.hadoop.mapred.TextOutputFormat;
 
 import java.io.IOException;
 
-// Mapper Class
-public class TrafficAnalysis {
-    public static class TrafficMapper extends Mapper<Object, Text, Text, IntWritable> {
-        private Text hourKey = new Text();
-        private IntWritable trafficVolume = new IntWritable();
+public class TrafficVolumeAnalysis {
 
-        @Override
-        protected void map(Object key, Text value, Context context) throws IOException, InterruptedException {
-            // Split the CSV line
-            String line = value.toString();
-            String[] fields = line.split(",");
-            if (fields.length < 9) {
-                return; // Skip invalid rows
-            }
+    public static class TrafficMapper extends MapReduceBase implements Mapper<Object, Text, Text, DoubleWritable> {
+        private final static DoubleWritable trafficVolume = new DoubleWritable();
+        private final static Text holidayStatus = new Text();
 
-            try {
-                String dateTime = fields[8]; // Date_time column
-                int traffic = Integer.parseInt(fields[0]); // Traffic_volume column
+        public void map(Object key, Text value, OutputCollector<Text, DoubleWritable> output, Reporter reporter) throws IOException {
+            // Giả sử dữ liệu có dạng "traffic_volume,holiday,date_time"
+            String[] fields = value.toString().split(",");
 
-                // Extract hour from date_time (format assumed: "02-10-2012 09:00")
-                String hour = dateTime.split(" ")[1].split(":")[0];
+            if (fields.length == 8) {
+                try {
+                    double traffic = Double.parseDouble(fields[0]);
+                    String holiday = fields[1];  // "None" nếu không phải ngày lễ, "Holiday" nếu là ngày lễ
+                    trafficVolume.set(traffic);
 
-                hourKey.set(hour); // Set hour as key
-                trafficVolume.set(traffic); // Set traffic volume as value
+                    if ("None".equals(holiday)) {
+                        holidayStatus.set("Non-Holiday");
+                    } else {
+                        holidayStatus.set("Holiday");
+                    }
 
-                context.write(hourKey, trafficVolume);
-            } catch (Exception e) {
-                // Handle any parsing errors
-                e.printStackTrace();
+                    output.collect(holidayStatus, trafficVolume);
+                } catch (NumberFormatException e) {
+                    // Nếu dữ liệu không hợp lệ, bỏ qua
+                    System.err.println("Skipping invalid record: " + value.toString());
+                }
             }
         }
     }
 
-    // Reducer Class
-    public static class TrafficReducer extends Reducer<Text, IntWritable, Text, Text> {
-        @Override
-        protected void reduce(Text key, Iterable<IntWritable> values, Context context)
-                throws IOException, InterruptedException {
-            int totalTraffic = 0;
+    public static class TrafficReducer extends MapReduceBase implements Reducer<Text, DoubleWritable, Text, DoubleWritable> {
+        private final static DoubleWritable result = new DoubleWritable();
+
+        public void reduce(Text key, Iterator<DoubleWritable> values, OutputCollector<Text, DoubleWritable> output, Reporter reporter) throws IOException {
+            double totalTraffic = 0.0;
             int count = 0;
 
-            // Calculate total and count for the current hour
-            for (IntWritable value : values) {
-                totalTraffic += value.get();
+            while (values.hasNext()) {
+                totalTraffic += values.next().get();
                 count++;
             }
 
-            double averageTraffic = count == 0 ? 0 : (double) totalTraffic / count;
-
-            // Output the total and average traffic for the hour
-            String result = "Total: " + totalTraffic + ", Average: " + String.format("%.2f", averageTraffic);
-            context.write(key, new Text(result));
+            double averageTraffic = totalTraffic / count;
+            result.set(averageTraffic);
+            output.collect(key, result);
         }
     }
 
-    // Main Method to Configure and Run the Job
     public static void main(String[] args) throws Exception {
         Configuration conf = new Configuration();
-        Job job = Job.getInstance(conf, "Traffic Analysis by Hour");
-        job.setJarByClass(TrafficAnalysis.class);
+        JobConf job = new JobConf(conf, TrafficVolumeAnalysis.class);
+        job.setJobName("TrafficVolumeAnalysis");
 
+        // Cấu hình mapper và reducer
         job.setMapperClass(TrafficMapper.class);
         job.setReducerClass(TrafficReducer.class);
 
+        // Cấu hình kiểu dữ liệu output
         job.setOutputKeyClass(Text.class);
-        job.setOutputValueClass(IntWritable.class);
+        job.setOutputValueClass(DoubleWritable.class);
 
-        FileInputFormat.addInputPath(job, new Path(args[0]));
-        FileOutputFormat.setOutputPath(job, new Path(args[1]));
+        // Đọc và ghi dữ liệu
+        FileInputFormat.setInputPaths(job, new Path(args[0]));
+        FileOutputFormat.setOutputPaths(job, new Path(args[1]));
 
-        System.exit(job.waitForCompletion(true) ? 0 : 1);
+        // Chạy job Hadoop
+        org.apache.hadoop.mapred.JobClient.runJob(job);
     }
 }
