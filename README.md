@@ -1,5 +1,6 @@
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
@@ -9,76 +10,66 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
 import java.io.IOException;
 
-// Lớp chính cho chương trình MapReduce
-public class TemperatureConverterMapReduce {
+public class TempFilterJob {
 
-    // Mapper
-    public static class TemperatureMapper extends Mapper<Object, Text, Text, Text> {
-
-        // Hàm chuyển đổi từ Kelvin sang Celsius
-        private double kelvinToCelsius(double kelvin) {
-            return kelvin - 273.15;
-        }
+    // Mapper Class
+    public static class TempFilterMapper extends Mapper<LongWritable, Text, Text, Text> {
 
         @Override
-        protected void map(Object key, Text value, Context context) throws IOException, InterruptedException {
+        protected void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
             String line = value.toString();
 
-            // Nếu là dòng header, phát nguyên dòng đó
-            if (line.startsWith("header") || key.toString().equals("0")) {
+            // Bỏ qua dòng tiêu đề
+            if (key.get() == 0 && line.contains("traffic_volume")) {
                 context.write(new Text(""), new Text(line));
                 return;
             }
 
             String[] data = line.split(",");
+
             try {
-                // Chuyển đổi nhiệt độ (cột thứ 3) từ Kelvin sang Celsius
-                double kelvin = Double.parseDouble(data[2]);
-                double celsius = kelvinToCelsius(kelvin);
-                data[2] = String.format("%.2f", celsius); // Cập nhật giá trị mới
+                // Kiểm tra giá trị trường `temp`
+                double temp = Double.parseDouble(data[2]);
+                if (temp == -273.15) {
+                    return; // Bỏ qua dòng có giá trị ngoại lai
+                }
 
-                // Tạo một chuỗi đã chỉnh sửa và phát ra
+                // Ghi lại các dòng hợp lệ
                 context.write(new Text(""), new Text(String.join(",", data)));
-
-            } catch (NumberFormatException e) {
+            } catch (NumberFormatException | ArrayIndexOutOfBoundsException e) {
                 // Bỏ qua các dòng không hợp lệ
-                System.err.println("Lỗi chuyển đổi dữ liệu: " + line);
             }
         }
     }
 
-    // Reducer
-    public static class TemperatureReducer extends Reducer<Text, Text, Text, Text> {
+    // Reducer Class
+    public static class TempFilterReducer extends Reducer<Text, Text, Text, Text> {
+
         @Override
         protected void reduce(Text key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
-            // Ghi tất cả các giá trị (dòng đã xử lý) vào output
             for (Text value : values) {
                 context.write(null, value);
             }
         }
     }
 
-    // Driver
+    // Main Method (Driver)
     public static void main(String[] args) throws Exception {
         if (args.length != 2) {
-            System.err.println("Usage: TemperatureConverterMapReduce <input_path> <output_path>");
+            System.err.println("Usage: TempFilterJob <input path> <output path>");
             System.exit(-1);
         }
 
         Configuration conf = new Configuration();
-        Job job = Job.getInstance(conf, "Temperature Converter");
+        Job job = Job.getInstance(conf, "Temperature Filter Job");
 
-        job.setJarByClass(TemperatureConverterMapReduce.class);
+        job.setJarByClass(TempFilterJob.class);
+        job.setMapperClass(TempFilterMapper.class);
+        job.setReducerClass(TempFilterReducer.class);
 
-        // Cài đặt Mapper và Reducer
-        job.setMapperClass(TemperatureMapper.class);
-        job.setReducerClass(TemperatureReducer.class);
-
-        // Đầu ra của Mapper và Reducer
         job.setOutputKeyClass(Text.class);
         job.setOutputValueClass(Text.class);
 
-        // Thiết lập input và output paths
         FileInputFormat.addInputPath(job, new Path(args[0]));
         FileOutputFormat.setOutputPath(job, new Path(args[1]));
 
