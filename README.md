@@ -5,7 +5,6 @@ import java.util.*;
 
 public class TrafficWeatherAnalysis {
 
-    // Hàm đọc dữ liệu từ file CSV và phân tích mối quan hệ
     public static void analyzeTrafficWeather(String inputFilePath) throws IOException {
         Configuration conf = new Configuration();
         FileSystem fs = FileSystem.get(conf);
