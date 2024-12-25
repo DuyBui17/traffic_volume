@@ -1,91 +1,97 @@
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.DoubleWritable;
-import org.apache.hadoop.io.Text;
-import org.apache.hadoop.mapreduce.Job;
-import org.apache.hadoop.mapreduce.Mapper;
-import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.fs.*;
+import org.apache.hadoop.io.*;
+import org.apache.hadoop.mapreduce.*;
 import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
 import java.io.IOException;
 
-public class TrafficVolumeAnalysis {
+public class TrafficPeakHourAnalysis {
 
-    // Mapper class
-    public static class TrafficMapper extends Mapper<Object, Text, Text, DoubleWritable> {
+    // Map Function: Phân loại dữ liệu theo giờ cao điểm
+    public static class TrafficMap extends Mapper<LongWritable, Text, Text, IntWritable> {
 
-        private final static DoubleWritable trafficVolume = new DoubleWritable();
-        private final static Text holidayStatus = new Text();
+        // Xác định các khoảng giờ cao điểm
+        private static final int PEAK_MORNING_START = 7; // 7 AM
+        private static final int PEAK_MORNING_END = 9;   // 9 AM
+        private static final int PEAK_EVENING_START = 17; // 5 PM
+        private static final int PEAK_EVENING_END = 19;   // 7 PM
 
-        public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
-            // Giả sử dữ liệu có dạng "traffic_volume,holiday,date_time"
-            String[] fields = value.toString().split(",");
+        private final static IntWritable one = new IntWritable(1);
+        private Text hourKey = new Text();
 
-            // Kiểm tra số trường dữ liệu
-            if (fields.length == 8) {
+        // Hàm map
+        public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
+            String line = value.toString();
+            String[] data = line.split(",");
+
+            if (data.length >= 2) {
                 try {
-                    double traffic = Double.parseDouble(fields[0]);
-                    String holiday = fields[1];  // "None" nếu không phải ngày lễ, "Holiday" nếu là ngày lễ
-                    trafficVolume.set(traffic);
+                    // Đọc giờ từ cột "date_time" (giả sử ở cột thứ 8)
+                    String dateTime = data[7]; 
+                    String hour = dateTime.split(" ")[1].split(":")[0]; // Lấy giờ từ cột date_time
+                    int hourInt = Integer.parseInt(hour);
 
-                    if ("None".equals(holiday)) {
-                        holidayStatus.set("Non-Holiday");
+                    // Phân loại giờ cao điểm (7h-9h sáng, 17h-19h tối)
+                    if ((hourInt >= PEAK_MORNING_START && hourInt <= PEAK_MORNING_END) ||
+                        (hourInt >= PEAK_EVENING_START && hourInt <= PEAK_EVENING_END)) {
+                        hourKey.set("Peak Hour");
                     } else {
-                        holidayStatus.set("Holiday");
+                        hourKey.set("Non-Peak Hour");
                     }
 
-                    // Gửi dữ liệu đến Reducer
-                    context.write(holidayStatus, trafficVolume);
-                } catch (NumberFormatException e) {
-                    // Nếu dữ liệu không hợp lệ, bỏ qua
-                    System.err.println("Skipping invalid record: " + value.toString());
+                    // Gửi kết quả về reducer
+                    context.write(hourKey, one);
+                } catch (Exception e) {
+                    // Bỏ qua dòng dữ liệu không hợp lệ
+                    return;
                 }
             }
         }
     }
 
-    // Reducer class
-    public static class TrafficReducer extends Reducer<Text, DoubleWritable, Text, DoubleWritable> {
+    // Reduce Function: Tổng hợp số lượng các sự kiện giao thông theo từng yếu tố
+    public static class TrafficReduce extends Reducer<Text, IntWritable, Text, IntWritable> {
+        private IntWritable result = new IntWritable();
 
-        private final static DoubleWritable result = new DoubleWritable();
-
-        public void reduce(Text key, Iterable<DoubleWritable> values, Context context) throws IOException, InterruptedException {
-            double totalTraffic = 0.0;
-            int count = 0;
-
-            // Tính tổng và số lượng giá trị để tính trung bình
-            for (DoubleWritable val : values) {
-                totalTraffic += val.get();
-                count++;
+        // Hàm reduce
+        public void reduce(Text key, Iterable<IntWritable> values, Context context) throws IOException, InterruptedException {
+            int sum = 0;
+            for (IntWritable val : values) {
+                sum += val.get();  // Tính tổng số sự kiện giao thông
             }
-
-            double averageTraffic = totalTraffic / count;
-            result.set(averageTraffic);
-
-            // Gửi kết quả đến output
+            result.set(sum);
             context.write(key, result);
         }
     }
 
-    // Main class để cấu hình job
     public static void main(String[] args) throws Exception {
-        // Cấu hình Hadoop job
+        if (args.length != 2) {
+            System.err.println("Usage: TrafficPeakHourAnalysis <input_path> <output_path>");
+            System.exit(-1);
+        }
+
+        // Đọc các tham số đầu vào và đầu ra
+        String inputPath = args[0];
+        String outputPath = args[1];
+
+        // Cấu hình cho job Hadoop
         Configuration conf = new Configuration();
-        Job job = Job.getInstance(conf, "Traffic Volume Analysis");
+        Job job = Job.getInstance(conf, "Traffic Peak Hour Analysis");
+        job.setJarByClass(TrafficPeakHourAnalysis.class);
 
-        // Thiết lập các lớp Mapper và Reducer
-        job.setJarByClass(TrafficVolumeAnalysis.class);
-        job.setMapperClass(TrafficMapper.class);
-        job.setReducerClass(TrafficReducer.class);
+        // Cài đặt Mapper và Reducer
+        job.setMapperClass(TrafficMap.class);
+        job.setReducerClass(TrafficReduce.class);
 
-        // Định dạng dữ liệu output
+        // Cài đặt đầu ra của Map và Reduce
         job.setOutputKeyClass(Text.class);
-        job.setOutputValueClass(DoubleWritable.class);
+        job.setOutputValueClass(IntWritable.class);
 
-        // Đọc dữ liệu từ input và ghi kết quả ra output
-        FileInputFormat.addInputPath(job, new Path(args[0]));
-        FileOutputFormat.setOutputPath(job, new Path(args[1]));
+        // Cài đặt đầu vào và đầu ra của job
+        FileInputFormat.addInputPath(job, new Path(inputPath));
+        FileOutputFormat.setOutputPath(job, new Path(outputPath));
 
         // Chạy job
         System.exit(job.waitForCompletion(true) ? 0 : 1);
