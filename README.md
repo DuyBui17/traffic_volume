@@ -6,7 +6,7 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
 import java.io.IOException;
-
+//oke
 public class TrafficPeakHourAnalysis {
 
     // Map Function: Phân loại dữ liệu theo giờ cao điểm
