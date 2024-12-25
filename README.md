@@ -22,9 +22,16 @@ public class TempFilterJob1 {
         Configuration conf = new Configuration();
         FileSystem fs = FileSystem.get(conf);
 
+        // Ensure the output directory does not exist
+        Path outputDir = new Path(outputPath);
+        if (fs.exists(outputDir)) {
+            System.err.println("Output directory " + outputPath + " already exists.");
+            System.exit(-1); // Exit with an error if the directory already exists
+        }
+
         // Open input and output files
         BufferedReader reader = new BufferedReader(new InputStreamReader(fs.open(new Path(inputPath))));
-        OutputStream outputStream = fs.create(new Path(outputPath));
+        OutputStream outputStream = fs.create(outputDir); // Create the output directory
         PrintWriter writer = new PrintWriter(outputStream);
 
         String line;
@@ -66,6 +73,7 @@ public class TempFilterJob1 {
         // Close the input and output streams
         reader.close();
         writer.close();
+        outputStream.close();
 
         System.out.println("Processing complete. Output saved to " + outputPath);
     }
