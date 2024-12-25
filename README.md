@@ -38,23 +38,38 @@ public class TrafficWeatherAnalysis {
 
                 // Kiểm tra và thêm giá trị vào bản đồ (Map) nếu chưa tồn tại
                 if (temp != -1) {
-                    trafficData.computeIfAbsent("temp", k -> new ArrayList<>()).add(temp);
+                    if (!trafficData.containsKey("temp")) {
+                        trafficData.put("temp", new ArrayList<>());
+                    }
+                    trafficData.get("temp").add(temp);
                 }
 
                 if (rain != -1) {
-                    trafficData.computeIfAbsent("rain", k -> new ArrayList<>()).add(rain);
+                    if (!trafficData.containsKey("rain")) {
+                        trafficData.put("rain", new ArrayList<>());
+                    }
+                    trafficData.get("rain").add(rain);
                 }
 
                 if (snow != -1) {
-                    trafficData.computeIfAbsent("snow", k -> new ArrayList<>()).add(snow);
+                    if (!trafficData.containsKey("snow")) {
+                        trafficData.put("snow", new ArrayList<>());
+                    }
+                    trafficData.get("snow").add(snow);
                 }
 
                 if (clouds != -1) {
-                    trafficData.computeIfAbsent("clouds", k -> new ArrayList<>()).add(clouds);
+                    if (!trafficData.containsKey("clouds")) {
+                        trafficData.put("clouds", new ArrayList<>());
+                    }
+                    trafficData.get("clouds").add(clouds);
                 }
 
                 if (trafficVolume != -1) {
-                    trafficData.computeIfAbsent("trafficVolume", k -> new ArrayList<>()).add(trafficVolume);
+                    if (!trafficData.containsKey("trafficVolume")) {
+                        trafficData.put("trafficVolume", new ArrayList<>());
+                    }
+                    trafficData.get("trafficVolume").add(trafficVolume);
                 }
 
             } catch (NumberFormatException e) {
