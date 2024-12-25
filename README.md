@@ -1,78 +1,63 @@
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.LongWritable;
-import org.apache.hadoop.io.Text;
-import org.apache.hadoop.mapreduce.Job;
-import org.apache.hadoop.mapreduce.Mapper;
-import org.apache.hadoop.mapreduce.Reducer;
-import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
-import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
-//ok
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.io.PrintWriter;
 
 public class TempFilterJob {
 
-    // Mapper Class
-    public static class TempFilterMapper extends Mapper<LongWritable, Text, Text, Text> {
-
-        @Override
-        protected void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
-            String line = value.toString();
-
-            // Bỏ qua dòng tiêu đề
-            if (key.get() == 0 && line.contains("traffic_volume")) {
-                context.write(new Text(""), new Text(line));
-                return;
-            }
-
-            String[] data = line.split(",");
-
-            try {
-                // Kiểm tra giá trị trường `temp`
-                double temp = Double.parseDouble(data[2]);
-                if (temp == -273.15) {
-                    return; // Bỏ qua dòng có giá trị ngoại lai
-                }
-
-                // Ghi lại các dòng hợp lệ
-                context.write(new Text(""), new Text(String.join(",", data)));
-            } catch (NumberFormatException | ArrayIndexOutOfBoundsException e) {
-                // Bỏ qua các dòng không hợp lệ
-            }
-        }
-    }
-
-    // Reducer Class
-    public static class TempFilterReducer extends Reducer<Text, Text, Text, Text> {
-
-        @Override
-        protected void reduce(Text key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
-            for (Text value : values) {
-                context.write(null, value);
-            }
-        }
-    }
-
-    // Main Method (Driver)
-    public static void main(String[] args) throws Exception {
+    public static void main(String[] args) throws IOException {
         if (args.length != 2) {
             System.err.println("Usage: TempFilterJob <input path> <output path>");
             System.exit(-1);
         }
 
-        Configuration conf = new Configuration();
-        Job job = Job.getInstance(conf, "Temperature Filter Job");
+        String inputPath = args[0];  // Path to input file
+        String outputPath = args[1]; // Path to output file
 
-        job.setJarByClass(TempFilterJob.class);
-        job.setMapperClass(TempFilterMapper.class);
-        job.setReducerClass(TempFilterReducer.class);
+        // Open input and output files
+        BufferedReader reader = new BufferedReader(new FileReader(inputPath));
+        PrintWriter writer = new PrintWriter(new FileWriter(outputPath));
 
-        job.setOutputKeyClass(Text.class);
-        job.setOutputValueClass(Text.class);
+        String line;
+        boolean isHeader = true;
+        
+        while ((line = reader.readLine()) != null) {
+            // Skip the header row
+            if (isHeader) {
+                writer.println(line);  // Write header to output
+                isHeader = false;
+                continue;
+            }
 
-        FileInputFormat.addInputPath(job, new Path(args[0]));
-        FileOutputFormat.setOutputPath(job, new Path(args[1]));
+            String[] data = line.split(",");
 
-        System.exit(job.waitForCompletion(true) ? 0 : 1);
+            try {
+                // Check temperature value
+                double temp = Double.parseDouble(data[2]);
+                if (temp == -273.15) {
+                    continue; // Skip row with invalid temperature
+                }
+
+                // Join the data and write it to the output file
+                StringBuilder valueBuilder = new StringBuilder();
+                for (int i = 0; i < data.length; i++) {
+                    valueBuilder.append(data[i]);
+                    if (i < data.length - 1) {
+                        valueBuilder.append(",");
+                    }
+                }
+                writer.println(valueBuilder.toString());
+                
+            } catch (NumberFormatException | ArrayIndexOutOfBoundsException e) {
+                // Skip invalid rows (e.g., missing temperature or parsing error)
+            }
+        }
+
+        // Close the input and output streams
+        reader.close();
+        writer.close();
+
+        System.out.println("Processing complete. Output saved to " + outputPath);
     }
 }
