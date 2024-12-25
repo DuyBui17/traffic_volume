@@ -1,160 +1,85 @@
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.Reducer;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.*;
-import java.io.*;
-import java.util.*;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
-public class TrafficWeatherAnalysis {
+import java.io.IOException;
 
-    // Hàm đọc dữ liệu từ file CSV và phân tích mối quan hệ
-    public static void analyzeTrafficWeather(String inputFilePath) throws IOException {
-        Configuration conf = new Configuration();
-        FileSystem fs = FileSystem.get(conf);
+// Mapper Class
+public class TrafficAnalysis {
+    public static class TrafficMapper extends Mapper<Object, Text, Text, IntWritable> {
+        private Text hourKey = new Text();
+        private IntWritable trafficVolume = new IntWritable();
 
-        // Đọc file đầu vào từ HDFS
-        Path inputPath = new Path(inputFilePath);
-        FSDataInputStream in = fs.open(inputPath);
-        BufferedReader br = new BufferedReader(new InputStreamReader(in));
-
-        String line;
-        Map<String, List<Double>> trafficData = new HashMap<>();
-        int lineCount = 0;
-
-        // Đọc từng dòng dữ liệu
-        while ((line = br.readLine()) != null) {
-            String[] data = line.split(",");
-
-            // Bỏ qua dòng đầu tiên (header)
-            if (lineCount == 0) {
-                lineCount++;
-                continue;
+        @Override
+        protected void map(Object key, Text value, Context context) throws IOException, InterruptedException {
+            // Split the CSV line
+            String line = value.toString();
+            String[] fields = line.split(",");
+            if (fields.length < 9) {
+                return; // Skip invalid rows
             }
 
             try {
-                double trafficVolume = Double.parseDouble(data[0]);  // Lưu lượng giao thông
-                double temp = Double.parseDouble(data[2]);  // Nhiệt độ (đã chuyển sang °C)
-                double rain = Double.parseDouble(data[3]);  // Lượng mưa
-                double snow = Double.parseDouble(data[4]);  // Lượng tuyết
-                double clouds = Double.parseDouble(data[5]);  // Mây
+                String dateTime = fields[8]; // Date_time column
+                int traffic = Integer.parseInt(fields[0]); // Traffic_volume column
 
-                // Kiểm tra và thêm giá trị vào bản đồ (Map) nếu chưa tồn tại
-                if (temp != -1) {
-                    List<Double> tempList = trafficData.get("temp");
-                    if (tempList == null) {
-                        tempList = new ArrayList<>();
-                        trafficData.put("temp", tempList);
-                    }
-                    tempList.add(temp);
-                }
+                // Extract hour from date_time (format assumed: "02-10-2012 09:00")
+                String hour = dateTime.split(" ")[1].split(":")[0];
 
-                if (rain != -1) {
-                    List<Double> rainList = trafficData.get("rain");
-                    if (rainList == null) {
-                        rainList = new ArrayList<>();
-                        trafficData.put("rain", rainList);
-                    }
-                    rainList.add(rain);
-                }
+                hourKey.set(hour); // Set hour as key
+                trafficVolume.set(traffic); // Set traffic volume as value
 
-                if (snow != -1) {
-                    List<Double> snowList = trafficData.get("snow");
-                    if (snowList == null) {
-                        snowList = new ArrayList<>();
-                        trafficData.put("snow", snowList);
-                    }
-                    snowList.add(snow);
-                }
+                context.write(hourKey, trafficVolume);
+            } catch (Exception e) {
+                // Handle any parsing errors
+                e.printStackTrace();
+            }
+        }
+    }
 
-                if (clouds != -1) {
-                    List<Double> cloudsList = trafficData.get("clouds");
-                    if (cloudsList == null) {
-                        cloudsList = new ArrayList<>();
-                        trafficData.put("clouds", cloudsList);
-                    }
-                    cloudsList.add(clouds);
-                }
+    // Reducer Class
+    public static class TrafficReducer extends Reducer<Text, IntWritable, Text, Text> {
+        @Override
+        protected void reduce(Text key, Iterable<IntWritable> values, Context context)
+                throws IOException, InterruptedException {
+            int totalTraffic = 0;
+            int count = 0;
 
-                if (trafficVolume != -1) {
-                    List<Double> trafficVolumeList = trafficData.get("trafficVolume");
-                    if (trafficVolumeList == null) {
-                        trafficVolumeList = new ArrayList<>();
-                        trafficData.put("trafficVolume", trafficVolumeList);
-                    }
-                    trafficVolumeList.add(trafficVolume);
-                }
-
-            } catch (NumberFormatException e) {
-                // Bỏ qua các dòng dữ liệu không hợp lệ
-                continue;
+            // Calculate total and count for the current hour
+            for (IntWritable value : values) {
+                totalTraffic += value.get();
+                count++;
             }
 
-            lineCount++;
+            double averageTraffic = count == 0 ? 0 : (double) totalTraffic / count;
+
+            // Output the total and average traffic for the hour
+            String result = "Total: " + totalTraffic + ", Average: " + String.format("%.2f", averageTraffic);
+            context.write(key, new Text(result));
         }
-
-        br.close();
-        in.close();
-
-        // Tính các thống kê cơ bản và phân tích mối quan hệ giữa thời tiết và giao thông
-        System.out.println("Phân tích ảnh hưởng của thời tiết đến giao thông:");
-        analyzeCorrelation(trafficData);
     }
 
-    // Hàm tính toán mối quan hệ giữa các yếu tố thời tiết và lưu lượng giao thông
-    public static void analyzeCorrelation(Map<String, List<Double>> trafficData) {
-        List<Double> trafficVolume = trafficData.get("trafficVolume");
-        List<Double> temp = trafficData.get("temp");
-        List<Double> rain = trafficData.get("rain");
-        List<Double> snow = trafficData.get("snow");
-        List<Double> clouds = trafficData.get("clouds");
-
-        // Tính mối tương quan giữa các yếu tố và lưu lượng giao thông
-        double tempCorrelation = calculateCorrelation(temp, trafficVolume);
-        double rainCorrelation = calculateCorrelation(rain, trafficVolume);
-        double snowCorrelation = calculateCorrelation(snow, trafficVolume);
-        double cloudsCorrelation = calculateCorrelation(clouds, trafficVolume);
-
-        // In ra kết quả phân tích
-        System.out.println("Mối tương quan giữa nhiệt độ và lưu lượng giao thông: " + tempCorrelation);
-        System.out.println("Mối tương quan giữa mưa và lưu lượng giao thông: " + rainCorrelation);
-        System.out.println("Mối tương quan giữa tuyết và lưu lượng giao thông: " + snowCorrelation);
-        System.out.println("Mối tương quan giữa mây và lưu lượng giao thông: " + cloudsCorrelation);
-    }
-
-    // Hàm tính toán mối tương quan giữa hai danh sách (correlation)
-    public static double calculateCorrelation(List<Double> x, List<Double> y) {
-        double meanX = calculateMean(x);
-        double meanY = calculateMean(y);
-
-        double numerator = 0;
-        double denominatorX = 0;
-        double denominatorY = 0;
-
-        for (int i = 0; i < x.size(); i++) {
-            numerator += (x.get(i) - meanX) * (y.get(i) - meanY);
-            denominatorX += Math.pow(x.get(i) - meanX, 2);
-            denominatorY += Math.pow(y.get(i) - meanY, 2);
-        }
-
-        return numerator / (Math.sqrt(denominatorX) * Math.sqrt(denominatorY));
-    }
-
-    // Hàm tính trung bình của một danh sách
-    public static double calculateMean(List<Double> data) {
-        double sum = 0;
-        for (double value : data) {
-            sum += value;
-        }
-        return sum / data.size();
-    }
-
+    // Main Method to Configure and Run the Job
     public static void main(String[] args) throws Exception {
-        if (args.length != 1) {
-            System.err.println("Usage: TrafficWeatherAnalysis <input_path>");
-            System.exit(-1);
-        }
+        Configuration conf = new Configuration();
+        Job job = Job.getInstance(conf, "Traffic Analysis by Hour");
+        job.setJarByClass(TrafficAnalysis.class);
 
-        String inputFilePath = args[0];  // Đường dẫn đầu vào (ví dụ: /inputfolder1/data.csv)
+        job.setMapperClass(TrafficMapper.class);
+        job.setReducerClass(TrafficReducer.class);
 
-        // Phân tích mối quan hệ giữa thời tiết và giao thông
-        analyzeTrafficWeather(inputFilePath);
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(IntWritable.class);
+
+        FileInputFormat.addInputPath(job, new Path(args[0]));
+        FileOutputFormat.setOutputPath(job, new Path(args[1]));
+
+        System.exit(job.waitForCompletion(true) ? 0 : 1);
     }
 }
