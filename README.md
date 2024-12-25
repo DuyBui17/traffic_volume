@@ -38,38 +38,48 @@ public class TrafficWeatherAnalysis {
 
                 // Kiểm tra và thêm giá trị vào bản đồ (Map) nếu chưa tồn tại
                 if (temp != -1) {
-                    if (!trafficData.containsKey("temp")) {
-                        trafficData.put("temp", new ArrayList<>());
+                    List<Double> tempList = trafficData.get("temp");
+                    if (tempList == null) {
+                        tempList = new ArrayList<>();
+                        trafficData.put("temp", tempList);
                     }
-                    trafficData.get("temp").add(temp);
+                    tempList.add(temp);
                 }
 
                 if (rain != -1) {
-                    if (!trafficData.containsKey("rain")) {
-                        trafficData.put("rain", new ArrayList<>());
+                    List<Double> rainList = trafficData.get("rain");
+                    if (rainList == null) {
+                        rainList = new ArrayList<>();
+                        trafficData.put("rain", rainList);
                     }
-                    trafficData.get("rain").add(rain);
+                    rainList.add(rain);
                 }
 
                 if (snow != -1) {
-                    if (!trafficData.containsKey("snow")) {
-                        trafficData.put("snow", new ArrayList<>());
+                    List<Double> snowList = trafficData.get("snow");
+                    if (snowList == null) {
+                        snowList = new ArrayList<>();
+                        trafficData.put("snow", snowList);
                     }
-                    trafficData.get("snow").add(snow);
+                    snowList.add(snow);
                 }
 
                 if (clouds != -1) {
-                    if (!trafficData.containsKey("clouds")) {
-                        trafficData.put("clouds", new ArrayList<>());
+                    List<Double> cloudsList = trafficData.get("clouds");
+                    if (cloudsList == null) {
+                        cloudsList = new ArrayList<>();
+                        trafficData.put("clouds", cloudsList);
                     }
-                    trafficData.get("clouds").add(clouds);
+                    cloudsList.add(clouds);
                 }
 
                 if (trafficVolume != -1) {
-                    if (!trafficData.containsKey("trafficVolume")) {
-                        trafficData.put("trafficVolume", new ArrayList<>());
+                    List<Double> trafficVolumeList = trafficData.get("trafficVolume");
+                    if (trafficVolumeList == null) {
+                        trafficVolumeList = new ArrayList<>();
+                        trafficData.put("trafficVolume", trafficVolumeList);
                     }
-                    trafficData.get("trafficVolume").add(trafficVolume);
+                    trafficVolumeList.add(trafficVolume);
                 }
 
             } catch (NumberFormatException e) {
