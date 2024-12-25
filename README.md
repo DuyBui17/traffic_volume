@@ -1,27 +1,36 @@
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import java.io.BufferedReader;
-import java.io.FileReader;
-import java.io.FileWriter;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.io.PrintWriter;
 
-public class TempFilterJob {
+public class TempFilterJob1 {
 
     public static void main(String[] args) throws IOException {
         if (args.length != 2) {
-            System.err.println("Usage: TempFilterJob <input path> <output path>");
+            System.err.println("Usage: TempFilterJob1 <input path> <output path>");
             System.exit(-1);
         }
 
-        String inputPath = args[0];  // Path to input file
-        String outputPath = args[1]; // Path to output file
+        String inputPath = args[0];  // Path to input file (HDFS)
+        String outputPath = args[1]; // Path to output file (HDFS)
+
+        // Get Hadoop configuration and file system
+        Configuration conf = new Configuration();
+        FileSystem fs = FileSystem.get(conf);
 
         // Open input and output files
-        BufferedReader reader = new BufferedReader(new FileReader(inputPath));
-        PrintWriter writer = new PrintWriter(new FileWriter(outputPath));
+        BufferedReader reader = new BufferedReader(new InputStreamReader(fs.open(new Path(inputPath))));
+        OutputStream outputStream = fs.create(new Path(outputPath));
+        PrintWriter writer = new PrintWriter(outputStream);
 
         String line;
         boolean isHeader = true;
-        
+
+        // Read the input file and process the data
         while ((line = reader.readLine()) != null) {
             // Skip the header row
             if (isHeader) {
