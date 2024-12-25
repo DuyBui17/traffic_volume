@@ -1,31 +1,28 @@
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.DoubleWritable;
-import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
-import org.apache.hadoop.mapred.FileInputFormat;
-import org.apache.hadoop.mapred.FileOutputFormat;
-import org.apache.hadoop.mapred.JobConf;
-import org.apache.hadoop.mapred.MapReduceBase;
-import org.apache.hadoop.mapred.Mapper;
-import org.apache.hadoop.mapred.Reducer;
-import org.apache.hadoop.mapred.RecordReader;
-import org.apache.hadoop.mapred.Reporter;
-import org.apache.hadoop.mapred.TextInputFormat;
-import org.apache.hadoop.mapred.TextOutputFormat;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
 import java.io.IOException;
 
 public class TrafficVolumeAnalysis {
 
-    public static class TrafficMapper extends MapReduceBase implements Mapper<Object, Text, Text, DoubleWritable> {
+    // Mapper class
+    public static class TrafficMapper extends Mapper<Object, Text, Text, DoubleWritable> {
+
         private final static DoubleWritable trafficVolume = new DoubleWritable();
         private final static Text holidayStatus = new Text();
 
-        public void map(Object key, Text value, OutputCollector<Text, DoubleWritable> output, Reporter reporter) throws IOException {
+        public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
             // Giả sử dữ liệu có dạng "traffic_volume,holiday,date_time"
             String[] fields = value.toString().split(",");
 
+            // Kiểm tra số trường dữ liệu
             if (fields.length == 8) {
                 try {
                     double traffic = Double.parseDouble(fields[0]);
@@ -38,7 +35,8 @@ public class TrafficVolumeAnalysis {
                         holidayStatus.set("Holiday");
                     }
 
-                    output.collect(holidayStatus, trafficVolume);
+                    // Gửi dữ liệu đến Reducer
+                    context.write(holidayStatus, trafficVolume);
                 } catch (NumberFormatException e) {
                     // Nếu dữ liệu không hợp lệ, bỏ qua
                     System.err.println("Skipping invalid record: " + value.toString());
@@ -47,42 +45,49 @@ public class TrafficVolumeAnalysis {
         }
     }
 
-    public static class TrafficReducer extends MapReduceBase implements Reducer<Text, DoubleWritable, Text, DoubleWritable> {
+    // Reducer class
+    public static class TrafficReducer extends Reducer<Text, DoubleWritable, Text, DoubleWritable> {
+
         private final static DoubleWritable result = new DoubleWritable();
 
-        public void reduce(Text key, Iterator<DoubleWritable> values, OutputCollector<Text, DoubleWritable> output, Reporter reporter) throws IOException {
+        public void reduce(Text key, Iterable<DoubleWritable> values, Context context) throws IOException, InterruptedException {
             double totalTraffic = 0.0;
             int count = 0;
 
-            while (values.hasNext()) {
-                totalTraffic += values.next().get();
+            // Tính tổng và số lượng giá trị để tính trung bình
+            for (DoubleWritable val : values) {
+                totalTraffic += val.get();
                 count++;
             }
 
             double averageTraffic = totalTraffic / count;
             result.set(averageTraffic);
-            output.collect(key, result);
+
+            // Gửi kết quả đến output
+            context.write(key, result);
         }
     }
 
+    // Main class để cấu hình job
     public static void main(String[] args) throws Exception {
+        // Cấu hình Hadoop job
         Configuration conf = new Configuration();
-        JobConf job = new JobConf(conf, TrafficVolumeAnalysis.class);
-        job.setJobName("TrafficVolumeAnalysis");
+        Job job = Job.getInstance(conf, "Traffic Volume Analysis");
 
-        // Cấu hình mapper và reducer
+        // Thiết lập các lớp Mapper và Reducer
+        job.setJarByClass(TrafficVolumeAnalysis.class);
         job.setMapperClass(TrafficMapper.class);
         job.setReducerClass(TrafficReducer.class);
 
-        // Cấu hình kiểu dữ liệu output
+        // Định dạng dữ liệu output
         job.setOutputKeyClass(Text.class);
         job.setOutputValueClass(DoubleWritable.class);
 
-        // Đọc và ghi dữ liệu
-        FileInputFormat.setInputPaths(job, new Path(args[0]));
-        FileOutputFormat.setOutputPaths(job, new Path(args[1]));
+        // Đọc dữ liệu từ input và ghi kết quả ra output
+        FileInputFormat.addInputPath(job, new Path(args[0]));
+        FileOutputFormat.setOutputPath(job, new Path(args[1]));
 
-        // Chạy job Hadoop
-        org.apache.hadoop.mapred.JobClient.runJob(job);
+        // Chạy job
+        System.exit(job.waitForCompletion(true) ? 0 : 1);
     }
 }
