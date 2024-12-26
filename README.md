@@ -1,5 +1,4 @@
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.*;
 import org.apache.hadoop.mapreduce.*;
@@ -7,12 +6,8 @@ import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
 import java.io.IOException;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.io.OutputStream;
-import java.io.PrintWriter;
 
-public class TempFilterJob1 {
+public class TempFilter {
 
     // Mapper class
     public static class TempFilterMapper extends Mapper<LongWritable, Text, Text, Text> {
@@ -29,12 +24,18 @@ public class TempFilterJob1 {
                 try {
                     // Đọc nhiệt độ (cột thứ 3)
                     double temp = Double.parseDouble(data[2]);
-                    if (temp != -273.15) { // Bỏ qua các dòng có nhiệt độ không hợp lệ
-                        // Ghi lại giá trị hợp lệ vào context
-                        resultKey.set(data[0]);  // Có thể là mã thành phố hoặc ngày tháng
-                        resultValue.set(line);   // Toàn bộ dòng dữ liệu
-                        context.write(resultKey, resultValue);
+
+                    // Kiểm tra giá trị nhiệt độ, nếu không hợp lệ thì thay bằng giá trị mặc định
+                    if (temp == -273.15) {
+                        temp = 15.0; // Thay giá trị không hợp lệ bằng giá trị mặc định
+                        data[2] = String.valueOf(temp); // Cập nhật lại nhiệt độ trong dữ liệu
                     }
+
+                    // Ghi lại dữ liệu vào context
+                    resultKey.set(data[0]);  // Có thể là mã thành phố hoặc ngày tháng
+                    resultValue.set(String.join(",", data)); // Toàn bộ dòng dữ liệu đã thay đổi nếu cần
+                    context.write(resultKey, resultValue);
+
                 } catch (NumberFormatException e) {
                     // Bỏ qua dòng dữ liệu không hợp lệ
                 }
@@ -49,7 +50,6 @@ public class TempFilterJob1 {
 
         @Override
         public void reduce(Text key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
-            // Chỉ cần ghi tất cả các dòng hợp lệ vào output
             for (Text value : values) {
                 resultValue.set(value);
                 context.write(NullWritable.get(), resultValue); // Ghi kết quả vào file đầu ra
@@ -72,7 +72,7 @@ public class TempFilterJob1 {
         Job job = Job.getInstance(conf, "Temperature Filter Job");
 
         // Thiết lập lớp Mapper và Reducer
-        job.setJarByClass(TempFilterJob1.class);
+        job.setJarByClass(TempFilter.class);
         job.setMapperClass(TempFilterMapper.class);
         job.setReducerClass(TempFilterReducer.class);
 
