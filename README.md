@@ -1,107 +1,103 @@
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.DoubleWritable;
-import org.apache.hadoop.io.Text;
-import org.apache.hadoop.mapreduce.Job;
-import org.apache.hadoop.mapreduce.Mapper;
-import org.apache.hadoop.mapreduce.Reducer;
-import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.conf.Configuration; 
+import org.apache.hadoop.fs.*; 
+import org.apache.hadoop.io.*; 
+import org.apache.hadoop.mapreduce.*; 
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat; 
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
-//0
+
 import java.io.IOException;
 
-public class TrafficVolume {
+public class TrafficPeakHour {
 
-    // Mapper class
-    public static class TrafficMapper extends Mapper<Object, Text, Text, DoubleWritable> {
-        private final static DoubleWritable trafficVolume = new DoubleWritable();
-        private final static Text holidayStatus = new Text();
+    // Map Function: Phân loại dữ liệu theo giờ cao điểm 
+    public static class TrafficMap extends Mapper<LongWritable, Text, Text, IntWritable> {
 
-        public void map(Object key, Text value, Context context) throws IOException, InterruptedException {
+        // Xác định các khoảng giờ cao điểm
+        private static final int PEAK_MORNING_START = 7; // 7 AM
+        private static final int PEAK_MORNING_END = 9;   // 9 AM
+        private static final int PEAK_EVENING_START = 17; // 5 PM
+        private static final int PEAK_EVENING_END = 19;   // 7 PM
+
+        private final static IntWritable one = new IntWritable(1);
+        private Text hourKey = new Text();
+
+        // Hàm map
+        public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
             String line = value.toString();
-
-            // Bỏ qua dòng tiêu đề
+            
+            // Bỏ qua dòng tiêu đề (Giả sử dòng đầu tiên là tiêu đề)
             if (line.startsWith("traffic_volume")) {
                 return;
             }
 
-            String[] fields = line.split(",");
+            String[] data = line.split(",");
 
-            // Kiểm tra đủ 9 trường
-            if (fields.length == 9) {
+            if (data.length >= 9) {
                 try {
-                    double traffic = Double.parseDouble(fields[0]); // Lấy traffic_volume
-                    String holiday = fields[1]; // Lấy trạng thái holiday
+                    // Đọc giờ từ cột "date_time" (giả sử ở cột thứ 9)
+                    String dateTime = data[8]; 
+                    String hour = dateTime.split(" ")[1].split(":")[0]; // Lấy giờ từ cột date_time
+                    int hourInt = Integer.parseInt(hour);
 
-                    // Thiết lập giá trị cho Mapper output
-                    trafficVolume.set(traffic);
-                    if ("None".equals(holiday)) {
-                        holidayStatus.set("Non-Holiday");
+                    // Phân loại giờ cao điểm (7h-9h sáng, 17h-19h tối)
+                    if ((hourInt >= PEAK_MORNING_START && hourInt <= PEAK_MORNING_END) ||
+                        (hourInt >= PEAK_EVENING_START && hourInt <= PEAK_EVENING_END)) {
+                        hourKey.set("Peak Hour");
                     } else {
-                        holidayStatus.set("Holiday");
+                        hourKey.set("Non-Peak Hour");
                     }
 
-                    // Gửi dữ liệu đến Reducer
-                    context.write(holidayStatus, trafficVolume);
-
-                    // Debug log
-                    System.out.println("Mapper output: " + holidayStatus.toString() + ", " + trafficVolume.get());
-                } catch (NumberFormatException e) {
-                    // Bỏ qua nếu dữ liệu không hợp lệ
+                    // Gửi kết quả về reducer
+                    context.write(hourKey, one);
+                } catch (Exception e) {
+                    // Bỏ qua dòng dữ liệu không hợp lệ
                     System.err.println("Skipping invalid record: " + line);
                 }
-            } else {
-                System.err.println("Invalid record format: " + line);
             }
         }
     }
 
-    // Reducer class
-    public static class TrafficReducer extends Reducer<Text, DoubleWritable, Text, DoubleWritable> {
-        private final static DoubleWritable result = new DoubleWritable();
+    // Reduce Function: Tổng hợp số lượng các sự kiện giao thông theo từng yếu tố 
+    public static class TrafficReduce extends Reducer<Text, IntWritable, Text, IntWritable> {
+        private IntWritable result = new IntWritable();
 
-        public void reduce(Text key, Iterable<DoubleWritable> values, Context context) throws IOException, InterruptedException {
-            double totalTraffic = 0.0;
-            int count = 0;
-
-            // Tính tổng và số lượng giá trị để tính trung bình
-            for (DoubleWritable val : values) {
-                totalTraffic += val.get();
-                count++;
+        // Hàm reduce
+        public void reduce(Text key, Iterable<IntWritable> values, Context context) throws IOException, InterruptedException {
+            int sum = 0;
+            for (IntWritable val : values) {
+                sum += val.get();  // Tính tổng số sự kiện giao thông
             }
-
-            if (count > 0) {
-                double averageTraffic = totalTraffic / count;
-                result.set(averageTraffic);
-
-                // Gửi kết quả đến output
-                context.write(key, result);
-
-                // Debug log
-                System.out.println("Reducer output: " + key.toString() + ", " + result.get());
-            } else {
-                System.err.println("No values for key: " + key.toString());
-            }
+            result.set(sum);
+            context.write(key, result);
         }
     }
 
-    // Main class để cấu hình job
     public static void main(String[] args) throws Exception {
+        if (args.length != 2) {
+            System.err.println("Usage: TrafficPeakHourAnalysis <input_path> <output_path>");
+            System.exit(-1);
+        }
+
+        // Đọc các tham số đầu vào và đầu ra
+        String inputPath = args[0];
+        String outputPath = args[1];
+
+        // Cấu hình cho job Hadoop
         Configuration conf = new Configuration();
-        Job job = Job.getInstance(conf, "Traffic Volume Analysis");
+        Job job = Job.getInstance(conf, "Traffic Peak Hour Analysis");
+        job.setJarByClass(TrafficPeakHour.class);
 
-        // Thiết lập các lớp Mapper và Reducer
-        job.setJarByClass(TrafficVolume.class);
-        job.setMapperClass(TrafficMapper.class);
-        job.setReducerClass(TrafficReducer.class);
+        // Cài đặt Mapper và Reducer
+        job.setMapperClass(TrafficMap.class);
+        job.setReducerClass(TrafficReduce.class);
 
-        // Định dạng dữ liệu output
+        // Cài đặt đầu ra của Map và Reduce
         job.setOutputKeyClass(Text.class);
-        job.setOutputValueClass(DoubleWritable.class);
+        job.setOutputValueClass(IntWritable.class);
 
-        // Đọc dữ liệu từ input và ghi kết quả ra output
-        FileInputFormat.addInputPath(job, new Path(args[0]));
-        FileOutputFormat.setOutputPath(job, new Path(args[1]));
+        // Cài đặt đầu vào và đầu ra của job
+        FileInputFormat.addInputPath(job, new Path(inputPath));
+        FileOutputFormat.setOutputPath(job, new Path(outputPath));
 
         // Chạy job
         System.exit(job.waitForCompletion(true) ? 0 : 1);
