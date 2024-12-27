@@ -12,7 +12,7 @@ import java.util.HashSet;
 
 public class HolidayCorrection {
 
-    // Mapper Class aa
+    // Mappersadasdasda
     public static class HolidayMapper extends Mapper<Object, Text, Text, Text> {
         private final Text dateKey = new Text();
         private final Text valueOutput = new Text();
