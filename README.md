@@ -10,9 +10,9 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import java.io.IOException;
 import java.util.HashSet;
 
-//ôkkkke áda
 public class HolidayCorrection {
 
+    // Mapper Class
     public static class HolidayMapper extends Mapper<Object, Text, Text, Text> {
         private final Text dateKey = new Text();
         private final Text valueOutput = new Text();
@@ -47,13 +47,13 @@ public class HolidayCorrection {
         @Override
         protected void reduce(Text key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
             HashSet<String> lines = new HashSet<>();
-            boolean isHoliday = false;
+            String holidayName = "None";
 
-            // Check if any line in the same day is marked as holiday
+            // Check if any line in the same day has a holiday name
             for (Text value : values) {
                 String[] fields = value.toString().split(",", 2);
                 if (!fields[0].equals("None")) {
-                    isHoliday = true; // If any time in the day is a holiday
+                    holidayName = fields[0]; // Update with the actual holiday name
                 }
                 lines.add(fields[1]); // Add the rest of the line
             }
@@ -61,8 +61,15 @@ public class HolidayCorrection {
             // Write all lines with corrected holiday status
             for (String line : lines) {
                 String[] fields = line.split(",", 9);
-                fields[1] = isHoliday ? "Holiday" : "None"; // Update only the value of the holiday field
-                result.set(String.join(",", fields));
+                fields[1] = holidayName; // Update the holiday field with the actual name or "None"
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < fields.length; i++) {
+                    sb.append(fields[i]);
+                    if (i < fields.length - 1) {
+                        sb.append(",");
+                    }
+                }
+                result.set(sb.toString());
                 context.write(null, result); // Output corrected line
             }
         }
