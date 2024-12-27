@@ -12,6 +12,7 @@ import java.util.HashSet;
 
 public class HolidayCorrection {
 
+//00
     // Mapper Class
     public static class HolidayMapper extends Mapper<Object, Text, Text, Text> {
         private final Text dateKey = new Text();
