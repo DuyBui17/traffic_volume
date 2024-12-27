@@ -10,6 +10,7 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import java.io.IOException;
 import java.util.HashSet;
 
+//ôkkkke
 public class HolidayCorrection {
 
     public static class HolidayMapper extends Mapper<Object, Text, Text, Text> {
