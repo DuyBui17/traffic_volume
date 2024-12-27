@@ -1,97 +1,93 @@
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.io.*; 
-import org.apache.hadoop.mapreduce.*; 
-import org.apache.hadoop.mapreduce.lib.input.FileInputFormat; 
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
 import java.io.IOException;
+import java.util.HashSet;
 
-public class TempFilter {
+public class HolidayCorrection {
 
-    // Mapper class
-    public static class TempFilterMapper extends Mapper<LongWritable, Text, Text, Text> {
-
-        private Text resultValue = new Text();
-        private Text resultKey = new Text();
+    // Mapper Class
+    public static class HolidayMapper extends Mapper<Object, Text, Text, Text> {
+        private final Text dateKey = new Text();
+        private final Text valueOutput = new Text();
 
         @Override
-        public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException {
+        protected void map(Object key, Text value, Context context) throws IOException, InterruptedException {
             String line = value.toString();
-            String[] data = line.split(",");
+            String[] fields = line.split(",");
 
-            if (data.length >= 3) {
-                try {
-                    // Đọc nhiệt độ (cột thứ 3)
-                    double temp = Double.parseDouble(data[2]);
-
-                    // Kiểm tra giá trị nhiệt độ, nếu không hợp lệ thì thay bằng giá trị mặc định
-                    if (temp == -273.15) {
-                        temp = 15.0; // Thay giá trị không hợp lệ bằng giá trị mặc định
-                        data[2] = String.valueOf(temp); // Cập nhật lại nhiệt độ trong dữ liệu
-                    }
-
-                    // Nối lại dữ liệu thành chuỗi và ghi vào context
-                    StringBuilder sb = new StringBuilder();
-                    for (int i = 0; i < data.length; i++) {
-                        sb.append(data[i]);
-                        if (i < data.length - 1) {
-                            sb.append(","); // Thêm dấu phẩy giữa các phần tử
-                        }
-                    }
-                    resultValue.set(sb.toString());
-                    resultKey.set(data[0]);  // Sử dụng cột đầu tiên làm key (tuỳ chỉnh theo dữ liệu)
-                    context.write(resultKey, resultValue);
-
-                } catch (NumberFormatException e) {
-                    // Bỏ qua dòng dữ liệu không hợp lệ
-                }
+            // Skip header row
+            if (fields[0].equals("traffic_volume")) {
+                return;
             }
+
+            // Extract date and mark as holiday or not
+            String[] dateTimeParts = fields[8].split(" "); // Assuming datetime is in the 9th column
+            String dateOnly = dateTimeParts[0]; // Extract date (dd-MM-yyyy)
+            String holiday = fields[1]; // Holiday field (2nd column)
+
+            dateKey.set(dateOnly); // Use the date as the key
+            valueOutput.set(holiday + "," + line); // Include holiday info and the full line
+
+            // Emit key-value pair
+            context.write(dateKey, valueOutput);
         }
     }
 
-    // Reducer class
-    public static class TempFilterReducer extends Reducer<Text, Text, NullWritable, Text> {
-
-        private Text resultValue = new Text();
+    // Reducer Class
+    public static class HolidayReducer extends Reducer<Text, Text, Text, Text> {
+        private final Text result = new Text();
 
         @Override
-        public void reduce(Text key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
+        protected void reduce(Text key, Iterable<Text> values, Context context) throws IOException, InterruptedException {
+            HashSet<String> lines = new HashSet<>();
+            boolean isHoliday = false;
+
+            // Check if any line in the same day is marked as holiday
             for (Text value : values) {
-                resultValue.set(value);
-                context.write(NullWritable.get(), resultValue); // Ghi kết quả vào file đầu ra
+                String[] fields = value.toString().split(",", 2);
+                if (!fields[0].equals("None")) {
+                    isHoliday = true; // If any time in the day is a holiday
+                }
+                lines.add(fields[1]); // Add the rest of the line
+            }
+
+            // Write all lines with corrected holiday status
+            for (String line : lines) {
+                String[] fields = line.split(",", 9);
+                fields[1] = isHoliday ? "Holiday" : "None"; // Update the holiday field
+                result.set(String.join(",", fields));
+                context.write(null, result);
             }
         }
     }
 
-    // Main class để cấu hình job
+    // Driver Method
     public static void main(String[] args) throws Exception {
         if (args.length != 2) {
-            System.err.println("Usage: TempFilter <input path> <output path>");
+            System.err.println("Usage: HolidayCorrection <input_path> <output_path>");
             System.exit(-1);
         }
 
-        String inputPath = args[0];  // Đường dẫn đến file đầu vào (HDFS)
-        String outputPath = args[1]; // Đường dẫn đến thư mục đầu ra (HDFS)
-
-        // Cấu hình Hadoop job
         Configuration conf = new Configuration();
-        Job job = Job.getInstance(conf, "Temperature Filter Job");
+        Job job = Job.getInstance(conf, "Holiday Correction");
+        job.setJarByClass(HolidayCorrection.class);
 
-        // Thiết lập lớp Mapper và Reducer
-        job.setJarByClass(TempFilter.class);
-        job.setMapperClass(TempFilterMapper.class);
-        job.setReducerClass(TempFilterReducer.class);
+        job.setMapperClass(HolidayMapper.class);
+        job.setReducerClass(HolidayReducer.class);
 
-        // Cài đặt đầu ra của Map và Reduce
         job.setOutputKeyClass(Text.class);
         job.setOutputValueClass(Text.class);
 
-        // Cài đặt đầu vào và đầu ra của job
-        FileInputFormat.addInputPath(job, new Path(inputPath));
-        FileOutputFormat.setOutputPath(job, new Path(outputPath));
+        FileInputFormat.addInputPath(job, new Path(args[0]));
+        FileOutputFormat.setOutputPath(job, new Path(args[1]));
 
-        // Chạy job
         System.exit(job.waitForCompletion(true) ? 0 : 1);
     }
 }
